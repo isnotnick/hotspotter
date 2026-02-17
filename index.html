@@ -330,6 +330,25 @@
 
   .info-banner.visible { display: block; }
 
+  .setup-banner {
+    background: rgba(243,156,18,0.12);
+    border: 1px solid rgba(243,156,18,0.4);
+    border-radius: 12px;
+    padding: 1rem 1.2rem;
+    font-size: 0.9rem;
+    color: var(--orange);
+    display: none;
+  }
+
+  .setup-banner.visible { display: block; }
+
+  .setup-banner strong { color: var(--text); }
+
+  .setup-banner ol {
+    margin: 0.6rem 0 0 1.2rem;
+    line-height: 1.7;
+  }
+
   .step-label {
     display: inline-block;
     background: var(--accent);
@@ -412,6 +431,17 @@
 </header>
 
 <div class="container">
+
+  <!-- Setup Mode Banner -->
+  <div id="setupBanner" class="setup-banner">
+    <strong>Welcome to HotSpotter!</strong> A default open hotspot is running so you can configure this device.
+    <ol>
+      <li>Select your WiFi and internet interfaces below</li>
+      <li>Scan for and connect to your upstream WiFi network</li>
+      <li>Configure your hotspot settings (SSID, password, etc.)</li>
+      <li>Start your hotspot — the setup hotspot will be replaced</li>
+    </ol>
+  </div>
 
   <!-- Interface Selection -->
   <div class="card">
@@ -661,12 +691,20 @@
       const btnStart = document.getElementById('btnStart');
       const btnStop = document.getElementById('btnStop');
       const clientsSection = document.getElementById('clientsSection');
+      const setupBanner = document.getElementById('setupBanner');
+
+      // Show/hide setup mode banner.
+      setupBanner.classList.toggle('visible', !!s.setup_mode);
 
       if (s.running) {
         badge.className = 'status-badge on';
-        badgeText.textContent = s.ssid ? `Hotspot: ${s.ssid}` : 'Hotspot On';
-        btnStart.style.display = 'none';
-        btnStop.style.display = '';
+        if (s.setup_mode) {
+          badgeText.textContent = 'Setup Mode';
+        } else {
+          badgeText.textContent = s.ssid ? `Hotspot: ${s.ssid}` : 'Hotspot On';
+        }
+        btnStart.style.display = s.setup_mode ? '' : 'none';
+        btnStop.style.display = s.setup_mode ? 'none' : '';
         clientsSection.style.display = '';
 
         const clientList = document.getElementById('clientList');

@@ -22,16 +22,18 @@ type HotspotConfig struct {
 	Hidden     bool   `json:"hidden"`
 	Band       string `json:"band"`    // "2.4" or "5"
 	Gateway    string `json:"gateway"` // AP gateway IP (e.g. "192.168.12.1")
+	NoInternet bool   `json:"no_internet"` // standalone AP, no internet sharing (-n flag)
 }
 
 // HotspotStatus represents the current state of the hotspot.
 type HotspotStatus struct {
-	Running bool    `json:"running"`
-	PID     string  `json:"pid,omitempty"`
-	SSID    string  `json:"ssid,omitempty"`
-	Gateway string  `json:"gateway,omitempty"`
-	Clients []Lease `json:"clients,omitempty"`
-	Message string  `json:"message,omitempty"`
+	Running   bool    `json:"running"`
+	PID       string  `json:"pid,omitempty"`
+	SSID      string  `json:"ssid,omitempty"`
+	Gateway   string  `json:"gateway,omitempty"`
+	Clients   []Lease `json:"clients,omitempty"`
+	Message   string  `json:"message,omitempty"`
+	SetupMode bool    `json:"setup_mode"`
 }
 
 // Lease represents a DHCP lease from dnsmasq.
@@ -44,9 +46,10 @@ type Lease struct {
 
 // HotspotManager wraps create_ap operations.
 type HotspotManager struct {
-	mu     sync.Mutex
-	config *HotspotConfig
-	wifi   *WifiManager
+	mu        sync.Mutex
+	config    *HotspotConfig
+	wifi      *WifiManager
+	setupMode bool // true when running the default first-run hotspot
 }
 
 // NewHotspotManager creates a new manager instance.
@@ -91,24 +94,30 @@ func (h *HotspotManager) Start(cfg HotspotConfig) error {
 	if iface == "" {
 		iface = "wlan0"
 	}
-	internet := cfg.Internet
-	if internet == "" {
-		internet = iface
-	}
 
-	// When using the same interface for AP and internet, create_ap will create
-	// a virtual interface for the AP and NAT through the physical interface's
-	// existing upstream connection. Verify that connection exists first.
-	if iface == internet && h.wifi != nil {
-		connSSID, _ := h.wifi.ConnectionStatus(iface)
-		if connSSID == "" {
-			return fmt.Errorf(
-				"same-interface mode: %s must be connected to an upstream WiFi network before starting the hotspot. "+
-					"Connect to a network first, then start the hotspot", iface)
+	if cfg.NoInternet {
+		// Standalone AP mode: no internet sharing.
+		args = append(args, "-n", iface)
+	} else {
+		internet := cfg.Internet
+		if internet == "" {
+			internet = iface
 		}
-	}
 
-	args = append(args, iface, internet)
+		// When using the same interface for AP and internet, create_ap will create
+		// a virtual interface for the AP and NAT through the physical interface's
+		// existing upstream connection. Verify that connection exists first.
+		if iface == internet && h.wifi != nil {
+			connSSID, _ := h.wifi.ConnectionStatus(iface)
+			if connSSID == "" {
+				return fmt.Errorf(
+					"same-interface mode: %s must be connected to an upstream WiFi network before starting the hotspot. "+
+						"Connect to a network first, then start the hotspot", iface)
+			}
+		}
+
+		args = append(args, iface, internet)
+	}
 
 	// SSID
 	ssid := cfg.SSID
@@ -133,6 +142,20 @@ func (h *HotspotManager) Start(cfg HotspotConfig) error {
 	return nil
 }
 
+// SetSetupMode marks the hotspot as running in first-run setup mode.
+func (h *HotspotManager) SetSetupMode(on bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.setupMode = on
+}
+
+// IsSetupMode returns true if the hotspot is in first-run setup mode.
+func (h *HotspotManager) IsSetupMode() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.setupMode
+}
+
 // Stop shuts down the running hotspot.
 func (h *HotspotManager) Stop() error {
 	h.mu.Lock()
@@ -148,6 +171,7 @@ func (h *HotspotManager) stopLocked() error {
 		_ = cmd.Run()
 	}
 	h.config = nil
+	h.setupMode = false
 	return nil
 }
 
@@ -162,8 +186,9 @@ func (h *HotspotManager) Status() HotspotStatus {
 	}
 
 	status := HotspotStatus{
-		Running: true,
-		PID:     pids[0],
+		Running:   true,
+		PID:       pids[0],
+		SetupMode: h.setupMode,
 	}
 	if h.config != nil {
 		status.SSID = h.config.SSID

@@ -290,6 +290,31 @@
     color: var(--muted);
   }
 
+  .info-banner {
+    background: rgba(108,92,231,0.1);
+    border: 1px solid rgba(108,92,231,0.3);
+    border-radius: 8px;
+    padding: 0.7rem 1rem;
+    font-size: 0.85rem;
+    color: var(--accent);
+    margin-bottom: 1rem;
+    display: none;
+  }
+
+  .info-banner.visible { display: block; }
+
+  .step-label {
+    display: inline-block;
+    background: var(--accent);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    margin-right: 0.4rem;
+    vertical-align: middle;
+  }
+
   /* Modal for WiFi password */
   .modal-overlay {
     display: none;
@@ -333,18 +358,47 @@
 
 <div class="container">
 
-  <!-- Hotspot Control -->
+  <!-- Interface Selection -->
   <div class="card">
-    <h2>Hotspot Configuration</h2>
+    <h2>Interfaces</h2>
     <div class="form-grid">
       <div class="form-group">
         <label>WiFi Interface (AP)</label>
-        <select id="apInterface"><option value="">Loading...</option></select>
+        <select id="apInterface" onchange="checkSameInterface()"><option value="">Loading...</option></select>
       </div>
       <div class="form-group">
-        <label>Internet Interface</label>
-        <select id="inetInterface"><option value="">Loading...</option></select>
+        <label>Internet Source</label>
+        <select id="inetInterface" onchange="checkSameInterface()"><option value="">Loading...</option></select>
       </div>
+    </div>
+    <div id="sameIfaceBanner" class="info-banner">
+      Same interface selected for AP and internet. A virtual AP interface will be created automatically.
+      Connect to an upstream WiFi network below <strong>before</strong> starting the hotspot.
+    </div>
+  </div>
+
+  <!-- WiFi Networks (Step 1 for same-interface mode) -->
+  <div class="card">
+    <h2>
+      <span id="stepNet" class="step-label" style="display:none">STEP 1</span>
+      Upstream WiFi Networks
+      <button class="btn-secondary" onclick="scanNetworks()" id="btnScan" style="margin-left:auto; padding:0.4rem 0.8rem; font-size:0.8rem">
+        Scan
+      </button>
+    </h2>
+    <div id="wifiStatus" style="margin-bottom:0.8rem; font-size:0.85rem; color:var(--muted)"></div>
+    <div id="networkList" class="network-list">
+      <div class="empty-state">Click "Scan" to discover nearby networks</div>
+    </div>
+  </div>
+
+  <!-- Hotspot Control (Step 2 for same-interface mode) -->
+  <div class="card">
+    <h2>
+      <span id="stepHot" class="step-label" style="display:none">STEP 2</span>
+      Hotspot Configuration
+    </h2>
+    <div class="form-grid">
       <div class="form-group">
         <label>Network Name (SSID)</label>
         <input type="text" id="ssid" placeholder="HotSpotter" value="HotSpotter">
@@ -386,20 +440,6 @@
     <div id="clientsSection" class="clients-section" style="display:none">
       <h3>Connected Clients</h3>
       <div id="clientList" class="client-list"></div>
-    </div>
-  </div>
-
-  <!-- WiFi Networks -->
-  <div class="card">
-    <h2>
-      Available WiFi Networks
-      <button class="btn-secondary" onclick="scanNetworks()" id="btnScan" style="margin-left:auto; padding:0.4rem 0.8rem; font-size:0.8rem">
-        Scan
-      </button>
-    </h2>
-    <div id="wifiStatus" style="margin-bottom:0.8rem; font-size:0.85rem; color:var(--muted)"></div>
-    <div id="networkList" class="network-list">
-      <div class="empty-state">Click "Scan" to discover nearby networks</div>
     </div>
   </div>
 
@@ -472,9 +512,20 @@
       all.forEach(i => {
         inetSelect.innerHTML += `<option value="${i.name}">${i.name} - ${i.type} (${i.state})</option>`;
       });
+
+      checkSameInterface();
     } catch (e) {
       toast('Could not load interfaces: ' + e.message, 'error');
     }
+  }
+
+  function checkSameInterface() {
+    const ap = document.getElementById('apInterface').value;
+    const inet = document.getElementById('inetInterface').value;
+    const same = ap && inet && ap === inet;
+    document.getElementById('sameIfaceBanner').classList.toggle('visible', same);
+    document.getElementById('stepNet').style.display = same ? '' : 'none';
+    document.getElementById('stepHot').style.display = same ? '' : 'none';
   }
 
   // Hotspot

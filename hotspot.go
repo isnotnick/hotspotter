@@ -39,11 +39,12 @@ type Client struct {
 type HotspotManager struct {
 	mu     sync.Mutex
 	config *HotspotConfig
+	wifi   *WifiManager
 }
 
 // NewHotspotManager creates a new manager instance.
-func NewHotspotManager() *HotspotManager {
-	return &HotspotManager{}
+func NewHotspotManager(wifi *WifiManager) *HotspotManager {
+	return &HotspotManager{wifi: wifi}
 }
 
 // Start creates a hotspot with the given config using create_ap.
@@ -83,6 +84,18 @@ func (h *HotspotManager) Start(cfg HotspotConfig) error {
 	internet := cfg.Internet
 	if internet == "" {
 		internet = iface
+	}
+
+	// When using the same interface for AP and internet, create_ap will create
+	// a virtual interface for the AP and NAT through the physical interface's
+	// existing upstream connection. Verify that connection exists first.
+	if iface == internet && h.wifi != nil {
+		connSSID, _ := h.wifi.ConnectionStatus(iface)
+		if connSSID == "" {
+			return fmt.Errorf(
+				"same-interface mode: %s must be connected to an upstream WiFi network before starting the hotspot. "+
+					"Connect to a network first, then start the hotspot", iface)
+		}
 	}
 
 	args = append(args, iface, internet)

@@ -24,8 +24,8 @@ func main() {
 		os.Exit(0)
 	}
 
-	hotspot := NewHotspotManager()
 	wifi := NewWifiManager()
+	hotspot := NewHotspotManager(wifi)
 	handlers := NewHandlers(hotspot, wifi)
 
 	mux := http.NewServeMux()

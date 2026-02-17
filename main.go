@@ -6,14 +6,23 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 )
+
+var version = "dev"
 
 //go:embed index.html
 var indexHTML []byte
 
 func main() {
 	addr := flag.String("addr", ":8080", "listen address (e.g. :8080 or 0.0.0.0:9090)")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println("hotspotter", version)
+		os.Exit(0)
+	}
 
 	hotspot := NewHotspotManager()
 	wifi := NewWifiManager()

@@ -63,8 +63,9 @@ func main() {
 	hotspot := NewHotspotManager(wifi)
 	handlers := NewHandlers(hotspot, wifi, config)
 
-	// Auto-reconnect to a saved WiFi network on startup.
-	go autoReconnect(wifi, config)
+	// On first run (no config, no saved networks), start a default open
+	// hotspot so the user can connect and configure via the web UI.
+	go autoStart(hotspot, wifi, config)
 
 	mux := http.NewServeMux()
 	handlers.RegisterRoutes(mux)
@@ -83,32 +84,50 @@ func main() {
 	log.Fatal(http.ListenAndServe(*addr, mux))
 }
 
-// autoReconnect tries to connect to a saved network if not already connected.
-func autoReconnect(wifi *WifiManager, config *ConfigStore) {
+// autoStart handles startup behaviour: if a config exists it tries to
+// reconnect to a saved upstream network; on first run (no config at all) it
+// launches a default open hotspot so the device is reachable over WiFi.
+func autoStart(hotspot *HotspotManager, wifi *WifiManager, config *ConfigStore) {
 	// Brief delay to let NetworkManager initialise.
 	time.Sleep(3 * time.Second)
 
+	// If there are saved networks, try to reconnect first.
 	saved := config.GetSavedNetworks()
-	if len(saved) == 0 {
-		return
-	}
-
-	// Check if already connected.
-	ssid, _ := wifi.ConnectionStatus("")
-	if ssid != "" {
-		log.Printf("Already connected to %q, skipping auto-reconnect", ssid)
-		return
-	}
-
-	log.Printf("Attempting auto-reconnect to %d saved network(s)...", len(saved))
-	for _, net := range saved {
-		log.Printf("  Trying %q...", net.SSID)
-		if err := wifi.Connect("", net.SSID, net.Password); err == nil {
-			log.Printf("  Connected to %q", net.SSID)
+	if len(saved) > 0 {
+		ssid, _ := wifi.ConnectionStatus("")
+		if ssid != "" {
+			log.Printf("Already connected to %q, skipping auto-reconnect", ssid)
 			return
 		}
+		log.Printf("Attempting auto-reconnect to %d saved network(s)...", len(saved))
+		for _, net := range saved {
+			log.Printf("  Trying %q...", net.SSID)
+			if err := wifi.Connect("", net.SSID, net.Password); err == nil {
+				log.Printf("  Connected to %q", net.SSID)
+				return
+			}
+		}
+		log.Printf("Auto-reconnect: no saved networks reachable")
 	}
-	log.Printf("Auto-reconnect: no saved networks reachable")
+
+	// First run: no saved hotspot config and no saved networks — start a
+	// default open hotspot so the user can connect and reach the web UI.
+	if config.GetHotspotConfig() != nil || len(saved) > 0 {
+		return
+	}
+
+	log.Println("First run detected — starting default setup hotspot (open, no password)")
+	cfg := HotspotConfig{
+		SSID:       "HotSpotter-Setup",
+		Gateway:    "192.168.12.1",
+		NoInternet: true,
+	}
+	if err := hotspot.Start(cfg); err != nil {
+		log.Printf("Failed to start default setup hotspot: %v", err)
+		return
+	}
+	hotspot.SetSetupMode(true)
+	log.Println("Setup hotspot running — connect to \"HotSpotter-Setup\" and open http://192.168.12.1:8080")
 }
 
 func doInstallService(addr, configDir string) {

@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HotSpotter</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e1e4ed;
+    --muted: #8b8fa3;
+    --accent: #6c5ce7;
+    --accent-hover: #7c6ef7;
+    --green: #00b894;
+    --red: #e74c3c;
+    --orange: #f39c12;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  header {
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    padding: 1rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  header h1 {
+    font-size: 1.4rem;
+    font-weight: 600;
+  }
+
+  header h1 span { color: var(--accent); }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.8rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 500;
+  }
+
+  .status-badge.on { background: rgba(0,184,148,0.15); color: var(--green); }
+  .status-badge.off { background: rgba(139,143,163,0.15); color: var(--muted); }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .on .status-dot { background: var(--green); }
+  .off .status-dot { background: var(--muted); }
+
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+  }
+
+  .card h2 {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.8rem;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .form-group.full { grid-column: 1 / -1; }
+
+  label {
+    font-size: 0.8rem;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  input, select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 0.8rem;
+    color: var(--text);
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  input:focus, select:focus {
+    border-color: var(--accent);
+  }
+
+  .checkbox-group {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    padding-top: 0.5rem;
+  }
+
+  .checkbox-group input[type="checkbox"] {
+    width: 16px; height: 16px;
+    accent-color: var(--accent);
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 0.6rem;
+    margin-top: 1rem;
+  }
+
+  button {
+    padding: 0.6rem 1.2rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-danger {
+    background: rgba(231,76,60,0.15);
+    color: var(--red);
+    border: 1px solid rgba(231,76,60,0.3);
+  }
+  .btn-danger:hover { background: rgba(231,76,60,0.25); }
+
+  .btn-secondary {
+    background: rgba(108,92,231,0.1);
+    color: var(--accent);
+    border: 1px solid rgba(108,92,231,0.3);
+  }
+  .btn-secondary:hover { background: rgba(108,92,231,0.2); }
+
+  .clients-section {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .clients-section h3 {
+    font-size: 0.9rem;
+    color: var(--muted);
+    margin-bottom: 0.5rem;
+  }
+
+  .client-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .client-item {
+    font-family: monospace;
+    font-size: 0.85rem;
+    padding: 0.3rem 0.6rem;
+    background: var(--bg);
+    border-radius: 6px;
+  }
+
+  .network-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+
+  .network-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.7rem 1rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    transition: border-color 0.2s;
+  }
+
+  .network-item:hover { border-color: var(--accent); }
+
+  .network-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .network-ssid {
+    font-weight: 500;
+    font-size: 0.95rem;
+  }
+
+  .network-meta {
+    font-size: 0.75rem;
+    color: var(--muted);
+    display: flex;
+    gap: 0.8rem;
+  }
+
+  .signal-bar {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 14px;
+  }
+
+  .signal-bar span {
+    width: 3px;
+    background: var(--border);
+    border-radius: 1px;
+  }
+  .signal-bar span.active { background: var(--green); }
+
+  .network-actions { display: flex; gap: 0.4rem; }
+
+  .toast {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    padding: 0.8rem 1.2rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    z-index: 100;
+    animation: slideIn 0.3s ease;
+    max-width: 400px;
+  }
+
+  .toast.success { background: rgba(0,184,148,0.9); color: white; }
+  .toast.error { background: rgba(231,76,60,0.9); color: white; }
+
+  @keyframes slideIn {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 16px; height: 16px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: var(--muted);
+  }
+
+  /* Modal for WiFi password */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 50;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-overlay.active { display: flex; }
+
+  .modal {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    width: 360px;
+  }
+
+  .modal h3 { margin-bottom: 1rem; }
+
+  .modal .form-group { margin-bottom: 0.8rem; }
+
+  @media (max-width: 600px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .container { padding: 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Hot<span>Spotter</span></h1>
+  <div id="hotspotBadge" class="status-badge off">
+    <span class="status-dot"></span>
+    <span id="badgeText">Hotspot Off</span>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Hotspot Control -->
+  <div class="card">
+    <h2>Hotspot Configuration</h2>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>WiFi Interface (AP)</label>
+        <select id="apInterface"><option value="">Loading...</option></select>
+      </div>
+      <div class="form-group">
+        <label>Internet Interface</label>
+        <select id="inetInterface"><option value="">Loading...</option></select>
+      </div>
+      <div class="form-group">
+        <label>Network Name (SSID)</label>
+        <input type="text" id="ssid" placeholder="HotSpotter" value="HotSpotter">
+      </div>
+      <div class="form-group">
+        <label>Passphrase (empty = open)</label>
+        <input type="password" id="passphrase" placeholder="Leave empty for open network">
+      </div>
+      <div class="form-group">
+        <label>Channel</label>
+        <select id="channel">
+          <option value="0">Auto</option>
+          <option value="1">1</option>
+          <option value="6" selected>6</option>
+          <option value="11">11</option>
+          <option value="36">36 (5GHz)</option>
+          <option value="40">40 (5GHz)</option>
+          <option value="44">44 (5GHz)</option>
+          <option value="48">48 (5GHz)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>WPA Version</label>
+        <select id="wpaVersion">
+          <option value="2">WPA2</option>
+          <option value="1+2">WPA1+2</option>
+          <option value="1">WPA1</option>
+        </select>
+      </div>
+      <div class="form-group checkbox-group">
+        <input type="checkbox" id="hidden">
+        <label for="hidden">Hidden Network</label>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn-primary" id="btnStart" onclick="startHotspot()">Start Hotspot</button>
+      <button class="btn-danger" id="btnStop" onclick="stopHotspot()" style="display:none">Stop Hotspot</button>
+    </div>
+    <div id="clientsSection" class="clients-section" style="display:none">
+      <h3>Connected Clients</h3>
+      <div id="clientList" class="client-list"></div>
+    </div>
+  </div>
+
+  <!-- WiFi Networks -->
+  <div class="card">
+    <h2>
+      Available WiFi Networks
+      <button class="btn-secondary" onclick="scanNetworks()" id="btnScan" style="margin-left:auto; padding:0.4rem 0.8rem; font-size:0.8rem">
+        Scan
+      </button>
+    </h2>
+    <div id="wifiStatus" style="margin-bottom:0.8rem; font-size:0.85rem; color:var(--muted)"></div>
+    <div id="networkList" class="network-list">
+      <div class="empty-state">Click "Scan" to discover nearby networks</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Connect Modal -->
+<div class="modal-overlay" id="connectModal">
+  <div class="modal">
+    <h3>Connect to <span id="modalSSID"></span></h3>
+    <div class="form-group">
+      <label>Password (leave empty if open)</label>
+      <input type="password" id="modalPassword" placeholder="Network password">
+    </div>
+    <div class="btn-row">
+      <button class="btn-primary" onclick="doConnect()">Connect</button>
+      <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let pendingSSID = '';
+  let statusTimer = null;
+
+  // Toast notifications
+  function toast(msg, type = 'success') {
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 4000);
+  }
+
+  // API helpers
+  async function api(path, opts = {}) {
+    const res = await fetch(path, opts);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Request failed');
+    return data;
+  }
+
+  async function apiPost(path, body) {
+    return api(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  }
+
+  // Interfaces
+  async function loadInterfaces() {
+    try {
+      const ifaces = await api('/api/interfaces');
+      const apSelect = document.getElementById('apInterface');
+      const inetSelect = document.getElementById('inetInterface');
+      apSelect.innerHTML = '';
+      inetSelect.innerHTML = '';
+
+      const wifi = ifaces.filter(i => i.wireless);
+      const all = ifaces;
+
+      if (wifi.length === 0) {
+        apSelect.innerHTML = '<option value="">No WiFi interfaces</option>';
+      } else {
+        wifi.forEach(i => {
+          apSelect.innerHTML += `<option value="${i.name}">${i.name} (${i.state})</option>`;
+        });
+      }
+
+      all.forEach(i => {
+        inetSelect.innerHTML += `<option value="${i.name}">${i.name} - ${i.type} (${i.state})</option>`;
+      });
+    } catch (e) {
+      toast('Could not load interfaces: ' + e.message, 'error');
+    }
+  }
+
+  // Hotspot
+  async function startHotspot() {
+    const btn = document.getElementById('btnStart');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Starting...';
+
+    try {
+      await apiPost('/api/hotspot/start', {
+        ssid: document.getElementById('ssid').value,
+        passphrase: document.getElementById('passphrase').value,
+        wpa_version: document.getElementById('wpaVersion').value,
+        channel: parseInt(document.getElementById('channel').value),
+        interface: document.getElementById('apInterface').value,
+        internet: document.getElementById('inetInterface').value,
+        hidden: document.getElementById('hidden').checked,
+      });
+      toast('Hotspot started');
+      refreshStatus();
+    } catch (e) {
+      toast('Failed to start hotspot: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Start Hotspot';
+    }
+  }
+
+  async function stopHotspot() {
+    try {
+      await apiPost('/api/hotspot/stop', {});
+      toast('Hotspot stopped');
+      refreshStatus();
+    } catch (e) {
+      toast('Failed to stop: ' + e.message, 'error');
+    }
+  }
+
+  async function refreshStatus() {
+    try {
+      const s = await api('/api/hotspot/status');
+      const badge = document.getElementById('hotspotBadge');
+      const badgeText = document.getElementById('badgeText');
+      const btnStart = document.getElementById('btnStart');
+      const btnStop = document.getElementById('btnStop');
+      const clientsSection = document.getElementById('clientsSection');
+
+      if (s.running) {
+        badge.className = 'status-badge on';
+        badgeText.textContent = s.ssid ? `Hotspot: ${s.ssid}` : 'Hotspot On';
+        btnStart.style.display = 'none';
+        btnStop.style.display = '';
+        clientsSection.style.display = '';
+
+        const clientList = document.getElementById('clientList');
+        if (s.clients && s.clients.length > 0) {
+          clientList.innerHTML = s.clients.map(c =>
+            `<div class="client-item">${c.mac}</div>`
+          ).join('');
+        } else {
+          clientList.innerHTML = '<div style="color:var(--muted);font-size:0.85rem">No clients connected</div>';
+        }
+      } else {
+        badge.className = 'status-badge off';
+        badgeText.textContent = 'Hotspot Off';
+        btnStart.style.display = '';
+        btnStop.style.display = 'none';
+        clientsSection.style.display = 'none';
+      }
+    } catch (e) {
+      // Silently retry on next interval.
+    }
+  }
+
+  // WiFi scanning
+  async function scanNetworks() {
+    const btn = document.getElementById('btnScan');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+
+    try {
+      const iface = document.getElementById('inetInterface').value;
+      const networks = await api(`/api/wifi/scan?iface=${encodeURIComponent(iface)}`);
+      renderNetworks(networks);
+    } catch (e) {
+      toast('Scan failed: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Scan';
+    }
+
+    // Also refresh upstream connection status.
+    refreshWifiStatus();
+  }
+
+  function signalBars(pct) {
+    const n = parseInt(pct) || 0;
+    const level = n > 75 ? 4 : n > 50 ? 3 : n > 25 ? 2 : 1;
+    let html = '<span class="signal-bar">';
+    for (let i = 1; i <= 4; i++) {
+      const active = i <= level ? ' active' : '';
+      html += `<span style="height:${i * 3 + 2}px" class="${active}"></span>`;
+    }
+    return html + '</span>';
+  }
+
+  function renderNetworks(networks) {
+    const el = document.getElementById('networkList');
+    if (!networks || networks.length === 0) {
+      el.innerHTML = '<div class="empty-state">No networks found</div>';
+      return;
+    }
+
+    el.innerHTML = networks.map(n => `
+      <div class="network-item">
+        <div class="network-info">
+          <div class="network-ssid">${escHtml(n.ssid)}</div>
+          <div class="network-meta">
+            ${signalBars(n.signal)}
+            <span>${escHtml(n.signal)}</span>
+            <span>${escHtml(n.security || 'Open')}</span>
+            <span>${escHtml(n.freq)}</span>
+          </div>
+        </div>
+        <div class="network-actions">
+          <button class="btn-primary" style="padding:0.35rem 0.7rem;font-size:0.8rem"
+            onclick="promptConnect('${escAttr(n.ssid)}', '${escAttr(n.security)}')">Connect</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function escHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+
+  function escAttr(s) {
+    return (s || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+  }
+
+  // Connect to network
+  function promptConnect(ssid, security) {
+    pendingSSID = ssid;
+    document.getElementById('modalSSID').textContent = ssid;
+    document.getElementById('modalPassword').value = '';
+    document.getElementById('connectModal').classList.add('active');
+    if (!security || security === '--' || security.toLowerCase() === 'open') {
+      // Auto-connect for open networks.
+      doConnect();
+      return;
+    }
+    document.getElementById('modalPassword').focus();
+  }
+
+  function closeModal() {
+    document.getElementById('connectModal').classList.remove('active');
+  }
+
+  async function doConnect() {
+    closeModal();
+    const iface = document.getElementById('inetInterface').value;
+    const password = document.getElementById('modalPassword').value;
+
+    try {
+      await apiPost('/api/wifi/connect', {
+        interface: iface,
+        ssid: pendingSSID,
+        password: password
+      });
+      toast(`Connected to ${pendingSSID}`);
+      refreshWifiStatus();
+    } catch (e) {
+      toast('Connection failed: ' + e.message, 'error');
+    }
+  }
+
+  async function disconnectWifi() {
+    const iface = document.getElementById('inetInterface').value;
+    try {
+      await apiPost('/api/wifi/disconnect', { interface: iface });
+      toast('Disconnected');
+      refreshWifiStatus();
+    } catch (e) {
+      toast('Disconnect failed: ' + e.message, 'error');
+    }
+  }
+
+  async function refreshWifiStatus() {
+    try {
+      const iface = document.getElementById('inetInterface').value;
+      const s = await api(`/api/wifi/status?iface=${encodeURIComponent(iface)}`);
+      const el = document.getElementById('wifiStatus');
+      if (s.connected) {
+        el.innerHTML = `Connected to <strong style="color:var(--green)">${escHtml(s.ssid)}</strong> &mdash;
+          <a href="#" onclick="disconnectWifi();return false" style="color:var(--red);text-decoration:none">Disconnect</a>`;
+      } else {
+        el.textContent = 'Not connected to any network';
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  // Init
+  document.addEventListener('DOMContentLoaded', () => {
+    loadInterfaces();
+    refreshStatus();
+    refreshWifiStatus();
+    // Poll hotspot status every 5 seconds.
+    statusTimer = setInterval(refreshStatus, 5000);
+  });
+</script>
+
+</body>
+</html>

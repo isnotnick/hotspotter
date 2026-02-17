@@ -9,11 +9,12 @@ import (
 type Handlers struct {
 	hotspot *HotspotManager
 	wifi    *WifiManager
+	config  *ConfigStore
 }
 
 // NewHandlers creates a new Handlers instance.
-func NewHandlers(h *HotspotManager, w *WifiManager) *Handlers {
-	return &Handlers{hotspot: h, wifi: w}
+func NewHandlers(h *HotspotManager, w *WifiManager, c *ConfigStore) *Handlers {
+	return &Handlers{hotspot: h, wifi: w, config: c}
 }
 
 // RegisterRoutes sets up all API routes on the given mux.
@@ -25,7 +26,10 @@ func (h *Handlers) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/wifi/connect", h.wifiConnect)
 	mux.HandleFunc("/api/wifi/disconnect", h.wifiDisconnect)
 	mux.HandleFunc("/api/wifi/status", h.wifiStatus)
+	mux.HandleFunc("/api/wifi/saved", h.savedNetworks)
+	mux.HandleFunc("/api/wifi/saved/remove", h.removeSavedNetwork)
 	mux.HandleFunc("/api/interfaces", h.listInterfaces)
+	mux.HandleFunc("/api/config/hotspot", h.getHotspotConfig)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
@@ -54,6 +58,9 @@ func (h *Handlers) hotspotStart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	// Persist hotspot config for daemon restarts.
+	_ = h.config.SaveHotspotConfig(&cfg)
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "started"})
 }
@@ -96,6 +103,17 @@ func (h *Handlers) wifiScan(w http.ResponseWriter, r *http.Request) {
 	if networks == nil {
 		networks = []WifiNetwork{}
 	}
+
+	// Mark networks that are saved.
+	saved := h.config.GetSavedNetworks()
+	savedMap := make(map[string]bool)
+	for _, s := range saved {
+		savedMap[s.SSID] = true
+	}
+	for i := range networks {
+		networks[i].Saved = savedMap[networks[i].SSID]
+	}
+
 	writeJSON(w, http.StatusOK, networks)
 }
 
@@ -123,6 +141,9 @@ func (h *Handlers) wifiConnect(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	// Remember this network for auto-reconnect.
+	_ = h.config.SaveNetwork(req.SSID, req.Password)
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "connected", "ssid": req.SSID})
 }
@@ -164,6 +185,49 @@ func (h *Handlers) wifiStatus(w http.ResponseWriter, r *http.Request) {
 		"connected": connected,
 		"ssid":      ssid,
 	})
+}
+
+func (h *Handlers) savedNetworks(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "GET required")
+		return
+	}
+	networks := h.config.GetSavedNetworks()
+	if networks == nil {
+		networks = []SavedNetwork{}
+	}
+	writeJSON(w, http.StatusOK, networks)
+}
+
+func (h *Handlers) removeSavedNetwork(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "POST required")
+		return
+	}
+	var req struct {
+		SSID string `json:"ssid"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	if err := h.config.RemoveNetwork(req.SSID); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "removed"})
+}
+
+func (h *Handlers) getHotspotConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "GET required")
+		return
+	}
+	cfg := h.config.GetHotspotConfig()
+	if cfg == nil {
+		cfg = &HotspotConfig{}
+	}
+	writeJSON(w, http.StatusOK, cfg)
 }
 
 func (h *Handlers) listInterfaces(w http.ResponseWriter, r *http.Request) {

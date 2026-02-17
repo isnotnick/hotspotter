@@ -172,6 +172,11 @@
   }
   .btn-secondary:hover { background: rgba(108,92,231,0.2); }
 
+  .btn-small {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.75rem;
+  }
+
   .clients-section {
     margin-top: 1rem;
     padding-top: 1rem;
@@ -184,18 +189,28 @@
     margin-bottom: 0.5rem;
   }
 
-  .client-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
+  .lease-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
   }
 
-  .client-item {
+  .lease-table th {
+    text-align: left;
+    color: var(--muted);
+    font-weight: 500;
+    padding: 0.4rem 0.6rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .lease-table td {
+    padding: 0.4rem 0.6rem;
     font-family: monospace;
-    font-size: 0.85rem;
-    padding: 0.3rem 0.6rem;
-    background: var(--bg);
-    border-radius: 6px;
+    font-size: 0.8rem;
+  }
+
+  .lease-table tr:nth-child(even) td {
+    background: rgba(255,255,255,0.02);
   }
 
   .network-list {
@@ -228,6 +243,18 @@
   .network-ssid {
     font-weight: 500;
     font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .saved-badge {
+    font-size: 0.65rem;
+    background: rgba(0,184,148,0.15);
+    color: var(--green);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-weight: 500;
   }
 
   .network-meta {
@@ -315,6 +342,34 @@
     vertical-align: middle;
   }
 
+  .saved-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .saved-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.8rem;
+  }
+
+  .saved-item .forget-btn {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 0;
+    line-height: 1;
+  }
+  .saved-item .forget-btn:hover { color: var(--red); }
+
   /* Modal for WiFi password */
   .modal-overlay {
     display: none;
@@ -390,6 +445,10 @@
     <div id="networkList" class="network-list">
       <div class="empty-state">Click "Scan" to discover nearby networks</div>
     </div>
+    <div id="savedSection" style="margin-top:1rem; padding-top:1rem; border-top:1px solid var(--border); display:none">
+      <h3 style="font-size:0.9rem; color:var(--muted); margin-bottom:0.5rem">Remembered Networks</h3>
+      <div id="savedList" class="saved-list"></div>
+    </div>
   </div>
 
   <!-- Hotspot Control (Step 2 for same-interface mode) -->
@@ -406,6 +465,10 @@
       <div class="form-group">
         <label>Passphrase (empty = open)</label>
         <input type="password" id="passphrase" placeholder="Leave empty for open network">
+      </div>
+      <div class="form-group">
+        <label>Gateway IP</label>
+        <input type="text" id="gateway" placeholder="192.168.12.1" value="192.168.12.1">
       </div>
       <div class="form-group">
         <label>Channel</label>
@@ -438,8 +501,8 @@
       <button class="btn-danger" id="btnStop" onclick="stopHotspot()" style="display:none">Stop Hotspot</button>
     </div>
     <div id="clientsSection" class="clients-section" style="display:none">
-      <h3>Connected Clients</h3>
-      <div id="clientList" class="client-list"></div>
+      <h3>Connected Clients / DHCP Leases</h3>
+      <div id="clientList"></div>
     </div>
   </div>
 
@@ -528,6 +591,31 @@
     document.getElementById('stepHot').style.display = same ? '' : 'none';
   }
 
+  // Load saved hotspot config to pre-fill form.
+  async function loadSavedConfig() {
+    try {
+      const cfg = await api('/api/config/hotspot');
+      if (cfg.ssid) document.getElementById('ssid').value = cfg.ssid;
+      if (cfg.passphrase) document.getElementById('passphrase').value = cfg.passphrase;
+      if (cfg.gateway) document.getElementById('gateway').value = cfg.gateway;
+      if (cfg.channel) {
+        const ch = document.getElementById('channel');
+        for (const opt of ch.options) {
+          if (opt.value === String(cfg.channel)) { opt.selected = true; break; }
+        }
+      }
+      if (cfg.wpa_version) {
+        const wpa = document.getElementById('wpaVersion');
+        for (const opt of wpa.options) {
+          if (opt.value === cfg.wpa_version) { opt.selected = true; break; }
+        }
+      }
+      if (cfg.hidden) document.getElementById('hidden').checked = true;
+    } catch (e) {
+      // No saved config yet, ignore.
+    }
+  }
+
   // Hotspot
   async function startHotspot() {
     const btn = document.getElementById('btnStart');
@@ -543,6 +631,7 @@
         interface: document.getElementById('apInterface').value,
         internet: document.getElementById('inetInterface').value,
         hidden: document.getElementById('hidden').checked,
+        gateway: document.getElementById('gateway').value,
       });
       toast('Hotspot started');
       refreshStatus();
@@ -582,9 +671,12 @@
 
         const clientList = document.getElementById('clientList');
         if (s.clients && s.clients.length > 0) {
-          clientList.innerHTML = s.clients.map(c =>
-            `<div class="client-item">${c.mac}</div>`
-          ).join('');
+          let html = '<table class="lease-table"><tr><th>IP Address</th><th>MAC Address</th><th>Hostname</th></tr>';
+          s.clients.forEach(c => {
+            html += `<tr><td>${escHtml(c.ip || '—')}</td><td>${escHtml(c.mac)}</td><td>${escHtml(c.hostname || '—')}</td></tr>`;
+          });
+          html += '</table>';
+          clientList.innerHTML = html;
         } else {
           clientList.innerHTML = '<div style="color:var(--muted);font-size:0.85rem">No clients connected</div>';
         }
@@ -617,7 +709,6 @@
       btn.textContent = 'Scan';
     }
 
-    // Also refresh upstream connection status.
     refreshWifiStatus();
   }
 
@@ -642,7 +733,10 @@
     el.innerHTML = networks.map(n => `
       <div class="network-item">
         <div class="network-info">
-          <div class="network-ssid">${escHtml(n.ssid)}</div>
+          <div class="network-ssid">
+            ${escHtml(n.ssid)}
+            ${n.saved ? '<span class="saved-badge">saved</span>' : ''}
+          </div>
           <div class="network-meta">
             ${signalBars(n.signal)}
             <span>${escHtml(n.signal)}</span>
@@ -651,8 +745,8 @@
           </div>
         </div>
         <div class="network-actions">
-          <button class="btn-primary" style="padding:0.35rem 0.7rem;font-size:0.8rem"
-            onclick="promptConnect('${escAttr(n.ssid)}', '${escAttr(n.security)}')">Connect</button>
+          <button class="btn-primary btn-small"
+            onclick="promptConnect('${escAttr(n.ssid)}', '${escAttr(n.security)}', ${n.saved})">Connect</button>
         </div>
       </div>
     `).join('');
@@ -669,16 +763,17 @@
   }
 
   // Connect to network
-  function promptConnect(ssid, security) {
+  function promptConnect(ssid, security, isSaved) {
     pendingSSID = ssid;
     document.getElementById('modalSSID').textContent = ssid;
     document.getElementById('modalPassword').value = '';
-    document.getElementById('connectModal').classList.add('active');
-    if (!security || security === '--' || security.toLowerCase() === 'open') {
-      // Auto-connect for open networks.
+
+    // Auto-connect for open networks or saved networks (password is stored server-side).
+    if (!security || security === '--' || security.toLowerCase() === 'open' || isSaved) {
       doConnect();
       return;
     }
+    document.getElementById('connectModal').classList.add('active');
     document.getElementById('modalPassword').focus();
   }
 
@@ -699,6 +794,7 @@
       });
       toast(`Connected to ${pendingSSID}`);
       refreshWifiStatus();
+      loadSavedNetworks();
     } catch (e) {
       toast('Connection failed: ' + e.message, 'error');
     }
@@ -731,9 +827,45 @@
     }
   }
 
+  // Saved networks
+  async function loadSavedNetworks() {
+    try {
+      const networks = await api('/api/wifi/saved');
+      const section = document.getElementById('savedSection');
+      const list = document.getElementById('savedList');
+
+      if (networks.length === 0) {
+        section.style.display = 'none';
+        return;
+      }
+
+      section.style.display = '';
+      list.innerHTML = networks.map(n => `
+        <div class="saved-item">
+          <span>${escHtml(n.ssid)}</span>
+          <button class="forget-btn" onclick="forgetNetwork('${escAttr(n.ssid)}')" title="Forget network">x</button>
+        </div>
+      `).join('');
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  async function forgetNetwork(ssid) {
+    try {
+      await apiPost('/api/wifi/saved/remove', { ssid });
+      toast(`Forgot ${ssid}`);
+      loadSavedNetworks();
+    } catch (e) {
+      toast('Failed to forget: ' + e.message, 'error');
+    }
+  }
+
   // Init
   document.addEventListener('DOMContentLoaded', () => {
     loadInterfaces();
+    loadSavedConfig();
+    loadSavedNetworks();
     refreshStatus();
     refreshWifiStatus();
     // Poll hotspot status every 5 seconds.

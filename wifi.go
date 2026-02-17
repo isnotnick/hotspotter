@@ -15,6 +15,7 @@ type WifiNetwork struct {
 	Signal   string `json:"signal"`
 	Security string `json:"security"`
 	Freq     string `json:"freq"`
+	Saved    bool   `json:"saved"`
 }
 
 // NetworkInterface represents a network interface on the system.

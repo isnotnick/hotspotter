@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"os/exec"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
+	"os/exec"
 )
 
 // HotspotConfig holds parameters for creating a WiFi hotspot.
@@ -18,21 +20,26 @@ type HotspotConfig struct {
 	Interface  string `json:"interface"`  // WiFi interface (e.g. wlan0)
 	Internet   string `json:"internet"`   // upstream interface (e.g. wlan1, eth0)
 	Hidden     bool   `json:"hidden"`
-	Band       string `json:"band"` // "2.4" or "5"
+	Band       string `json:"band"`    // "2.4" or "5"
+	Gateway    string `json:"gateway"` // AP gateway IP (e.g. "192.168.12.1")
 }
 
 // HotspotStatus represents the current state of the hotspot.
 type HotspotStatus struct {
-	Running  bool     `json:"running"`
-	PID      string   `json:"pid,omitempty"`
-	SSID     string   `json:"ssid,omitempty"`
-	Clients  []Client `json:"clients,omitempty"`
-	Message  string   `json:"message,omitempty"`
+	Running bool    `json:"running"`
+	PID     string  `json:"pid,omitempty"`
+	SSID    string  `json:"ssid,omitempty"`
+	Gateway string  `json:"gateway,omitempty"`
+	Clients []Lease `json:"clients,omitempty"`
+	Message string  `json:"message,omitempty"`
 }
 
-// Client represents a connected WiFi client.
-type Client struct {
-	MAC string `json:"mac"`
+// Lease represents a DHCP lease from dnsmasq.
+type Lease struct {
+	MAC      string `json:"mac"`
+	IP       string `json:"ip"`
+	Hostname string `json:"hostname"`
+	Expiry   string `json:"expiry"`
 }
 
 // HotspotManager wraps create_ap operations.
@@ -72,6 +79,9 @@ func (h *HotspotManager) Start(cfg HotspotConfig) error {
 			wpa = "2"
 		}
 		args = append(args, "-w", wpa)
+	}
+	if cfg.Gateway != "" {
+		args = append(args, "-g", cfg.Gateway)
 	}
 
 	args = append(args, "--daemon")
@@ -157,13 +167,45 @@ func (h *HotspotManager) Status() HotspotStatus {
 	}
 	if h.config != nil {
 		status.SSID = h.config.SSID
+		status.Gateway = h.config.Gateway
 	}
 
-	// List connected clients.
-	clients, _ := h.listClientsForPID(pids[0])
-	status.Clients = clients
+	// Read DHCP leases from dnsmasq.
+	status.Clients = h.readLeases()
 
 	return status
+}
+
+// readLeases parses dnsmasq lease files created by create_ap.
+// Lease format: <expiry_epoch> <MAC> <IP> <hostname> <client-id>
+func (h *HotspotManager) readLeases() []Lease {
+	var leases []Lease
+
+	matches, _ := filepath.Glob("/tmp/create_ap.*/dnsmasq.leases")
+	for _, path := range matches {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		scanner := bufio.NewScanner(bytes.NewReader(data))
+		for scanner.Scan() {
+			fields := strings.Fields(scanner.Text())
+			if len(fields) < 4 {
+				continue
+			}
+			hostname := fields[3]
+			if hostname == "*" {
+				hostname = ""
+			}
+			leases = append(leases, Lease{
+				Expiry:   fields[0],
+				MAC:      fields[1],
+				IP:       fields[2],
+				Hostname: hostname,
+			})
+		}
+	}
+	return leases
 }
 
 func (h *HotspotManager) listRunningPIDs() ([]string, error) {
@@ -181,21 +223,4 @@ func (h *HotspotManager) listRunningPIDs() ([]string, error) {
 		}
 	}
 	return pids, nil
-}
-
-func (h *HotspotManager) listClientsForPID(pid string) ([]Client, error) {
-	cmd := exec.Command("create_ap", "--list-clients", pid)
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-	var clients []Client
-	scanner := bufio.NewScanner(bytes.NewReader(out))
-	for scanner.Scan() {
-		mac := strings.TrimSpace(scanner.Text())
-		if mac != "" {
-			clients = append(clients, Client{MAC: mac})
-		}
-	}
-	return clients, nil
 }
